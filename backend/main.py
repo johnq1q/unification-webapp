@@ -28,37 +28,92 @@ UPLOAD_DIR = BASE_DIR / "uploads"
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 
-# --- UI landing page (so Replit Preview shows a webpage, not just JSON) ---
+# ---------- UI ROOT (HTML) ----------
 @app.get("/", response_class=HTMLResponse)
-def root():
-    return """
+def root_page():
+    ocr_text = "Available ✅" if OCR_AVAILABLE else "Not available ❌"
+    return f"""
     <html>
       <head>
-        <title>Unification v2.0</title>
+        <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>Unification v2.0</title>
         <style>
-          body { font-family: Arial, sans-serif; background:#0b1220; color:#e6eefc; padding:24px; }
-          .card { max-width:720px; margin:0 auto; background:#111a2e; border-radius:18px; padding:24px; box-shadow:0 10px 30px rgba(0,0,0,.35); }
-          h1 { margin:0 0 10px; color:#69b7ff; }
-          .ok { color:#4ade80; font-weight:700; }
-          code { background:#0b1220; padding:4px 8px; border-radius:8px; }
-          a { color:#9dd6ff; }
-          .row { margin:10px 0; line-height:1.45; }
+          body {{
+            background:#0b1220;
+            color:#e5e7eb;
+            font-family: Arial, sans-serif;
+            margin:0;
+            padding:0;
+            display:flex;
+            align-items:center;
+            justify-content:center;
+            min-height:100vh;
+          }}
+          .card {{
+            width:min(720px, 92vw);
+            background:#0f1a33;
+            border:1px solid rgba(255,255,255,0.08);
+            border-radius:18px;
+            padding:28px 22px;
+            box-shadow: 0 12px 40px rgba(0,0,0,0.35);
+          }}
+          h1 {{
+            margin:0 0 10px 0;
+            font-size:36px;
+            color:#38bdf8;
+          }}
+          .ok {{
+            color:#22c55e;
+            font-weight:700;
+          }}
+          .muted {{
+            color:#9ca3af;
+          }}
+          code {{
+            background: rgba(255,255,255,0.06);
+            padding: 4px 8px;
+            border-radius: 8px;
+          }}
+          ul {{
+            margin: 12px 0 0 18px;
+          }}
+          a {{
+            color:#60a5fa;
+          }}
         </style>
       </head>
       <body>
         <div class="card">
           <h1>Unification v2.0</h1>
-          <div class="row"><span class="ok">Status:</span> Running</div>
-          <div class="row">Mode: Basketball 1H Structural Analysis</div>
-          <div class="row">OCR Available: <b>%s</b></div>
-          <div class="row">Health: <code>/health</code></div>
-          <div class="row">Docs: <a href="/docs">/docs</a></div>
-          <div class="row">Upload: <code>POST /upload</code> (image file)</div>
+          <div class="ok">Status: Running</div>
+          <div class="muted" style="margin-top:8px;">Mode: Basketball 1H Structural Analysis</div>
+          <div class="muted" style="margin-top:8px;">OCR: {ocr_text}</div>
+
+          <hr style="margin:18px 0; border:none; border-top:1px solid rgba(255,255,255,0.08);" />
+
+          <div class="muted">Quick endpoints:</div>
+          <ul>
+            <li><code>/api</code> (JSON status)</li>
+            <li><code>/health</code></li>
+            <li><code>/docs</code> (FastAPI Swagger UI)</li>
+            <li><code>/upload</code> (POST image)</li>
+          </ul>
         </div>
       </body>
     </html>
-    """ % ("YES" if OCR_AVAILABLE else "NO")
+    """
+
+
+# ---------- JSON ROOT (API STATUS) ----------
+@app.get("/api")
+def root_api():
+    return {
+        "engine": "Unification v2.0",
+        "status": "running",
+        "mode": "Basketball 1H Structural Analysis",
+        "ocr_available": OCR_AVAILABLE
+    }
 
 
 @app.get("/health")
@@ -120,15 +175,14 @@ def extract_text(file_id: str):
             content={
                 "ok": False,
                 "error": "OCR dependencies not available in this environment.",
-                "hint": "We will switch to an alternative extractor if needed."
+                "hint": "If you want OCR on Replit, we may need a different approach than Tesseract."
             }
         )
 
     try:
         img = Image.open(img_path)
-        raw = pytesseract.image_to_string(img)
-        raw = raw.strip()
-        return {"ok": True, "file_id": file_id, "text": raw[:8000]}
+        raw = pytesseract.image_to_string(img).strip()
+        return {"ok": True, "file_id": file_id, "text": raw[:8000]}  # cap for safety
     except Exception as e:
         return JSONResponse(
             status_code=500,
@@ -138,8 +192,8 @@ def extract_text(file_id: str):
 
 def parse_ladder_from_text(raw_text: str):
     """
-    Parser stub.
-    Next step will extract structured ladder rows.
+    Stub parser for now: returns detected signals and placeholders.
+    Next iteration will extract structured ladder rows.
     """
     text = raw_text.replace("\n", " ").strip()
     lowered = text.lower()
@@ -148,7 +202,7 @@ def parse_ladder_from_text(raw_text: str):
         "mentions_over": "over" in lowered,
         "mentions_under": "under" in lowered,
         "mentions_total": "total" in lowered or "totals" in lowered,
-        "mentions_1st_half": "1st" in lowered or "1 half" in lowered or "first half" in lowered
+        "mentions_1st_half": ("1st" in lowered) or ("1 half" in lowered) or ("first half" in lowered),
     }
 
     return {
@@ -177,7 +231,11 @@ def parse_uploaded(file_id: str):
         raw = pytesseract.image_to_string(img).strip()
         parsed = parse_ladder_from_text(raw)
 
-        return {"ok": True, "file_id": file_id, "parsed": parsed}
+        return {
+            "ok": True,
+            "file_id": file_id,
+            "parsed": parsed
+        }
     except Exception as e:
         return JSONResponse(
             status_code=500,
