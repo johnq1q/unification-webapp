@@ -1,9 +1,8 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, HTMLResponse
 from pathlib import Path
 import uuid
-import os
 
 # Optional OCR stack
 try:
@@ -29,14 +28,37 @@ UPLOAD_DIR = BASE_DIR / "uploads"
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 
-@app.get("/")
+# --- UI landing page (so Replit Preview shows a webpage, not just JSON) ---
+@app.get("/", response_class=HTMLResponse)
 def root():
-    return {
-        "engine": "Unification v2.0",
-        "status": "running",
-        "mode": "Basketball 1H Structural Analysis",
-        "ocr_available": OCR_AVAILABLE
-    }
+    return """
+    <html>
+      <head>
+        <title>Unification v2.0</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <style>
+          body { font-family: Arial, sans-serif; background:#0b1220; color:#e6eefc; padding:24px; }
+          .card { max-width:720px; margin:0 auto; background:#111a2e; border-radius:18px; padding:24px; box-shadow:0 10px 30px rgba(0,0,0,.35); }
+          h1 { margin:0 0 10px; color:#69b7ff; }
+          .ok { color:#4ade80; font-weight:700; }
+          code { background:#0b1220; padding:4px 8px; border-radius:8px; }
+          a { color:#9dd6ff; }
+          .row { margin:10px 0; line-height:1.45; }
+        </style>
+      </head>
+      <body>
+        <div class="card">
+          <h1>Unification v2.0</h1>
+          <div class="row"><span class="ok">Status:</span> Running</div>
+          <div class="row">Mode: Basketball 1H Structural Analysis</div>
+          <div class="row">OCR Available: <b>%s</b></div>
+          <div class="row">Health: <code>/health</code></div>
+          <div class="row">Docs: <a href="/docs">/docs</a></div>
+          <div class="row">Upload: <code>POST /upload</code> (image file)</div>
+        </div>
+      </body>
+    </html>
+    """ % ("YES" if OCR_AVAILABLE else "NO")
 
 
 @app.get("/health")
@@ -106,7 +128,7 @@ def extract_text(file_id: str):
         img = Image.open(img_path)
         raw = pytesseract.image_to_string(img)
         raw = raw.strip()
-        return {"ok": True, "file_id": file_id, "text": raw[:8000]}  # cap for safety
+        return {"ok": True, "file_id": file_id, "text": raw[:8000]}
     except Exception as e:
         return JSONResponse(
             status_code=500,
@@ -116,13 +138,8 @@ def extract_text(file_id: str):
 
 def parse_ladder_from_text(raw_text: str):
     """
-    Very first stub parser.
-    For now: returns detected tokens and placeholders.
-
-    Next iteration will:
-    - detect Over/Under columns
-    - detect total lines (e.g. 84.5, 85.5)
-    - map odds to each line
+    Parser stub.
+    Next step will extract structured ladder rows.
     """
     text = raw_text.replace("\n", " ").strip()
     lowered = text.lower()
@@ -134,7 +151,6 @@ def parse_ladder_from_text(raw_text: str):
         "mentions_1st_half": "1st" in lowered or "1 half" in lowered or "first half" in lowered
     }
 
-    # Placeholder: actual ladder extraction comes next
     return {
         "signals": signals,
         "raw_sample": text[:500],
@@ -161,11 +177,7 @@ def parse_uploaded(file_id: str):
         raw = pytesseract.image_to_string(img).strip()
         parsed = parse_ladder_from_text(raw)
 
-        return {
-            "ok": True,
-            "file_id": file_id,
-            "parsed": parsed
-        }
+        return {"ok": True, "file_id": file_id, "parsed": parsed}
     except Exception as e:
         return JSONResponse(
             status_code=500,
